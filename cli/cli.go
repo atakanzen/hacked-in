@@ -3,7 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"io"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -12,40 +12,24 @@ import (
 )
 
 var (
-	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
-	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
-	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
-	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
+	appStyle   = lipgloss.NewStyle().Padding(1, 2)
+	titleStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFFDF5")).
+			Background(lipgloss.Color("#25A065")).
+			Padding(0, 1)
+	statusMessageStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#04B575", Dark: "#04B575"})
 	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
+	invalidInputStyle = lipgloss.NewStyle().Background(lipgloss.Color("#FF400050")).Foreground(lipgloss.Color("#FFFDF5"))
 )
 
-type item int
+type item struct {
+	title string
+}
 
 func (i item) FilterValue() string { return "" }
-
-type itemDelegate struct{}
-
-func (d itemDelegate) Height() int                               { return 1 }
-func (d itemDelegate) Spacing() int                              { return 0 }
-func (d itemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
-func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
-	i, ok := listItem.(item)
-	if !ok {
-		return
-	}
-
-	str := fmt.Sprintf("%d. %d", index+1, i)
-
-	fn := itemStyle.Render
-	if index == m.Index() {
-		fn = func(s string) string {
-			return selectedItemStyle.Render("> " + s)
-		}
-	}
-
-	fmt.Fprint(w, fn(str))
-}
+func (i item) Title() string       { return i.title }
 
 type model struct {
 	query          textinput.Model
@@ -53,10 +37,11 @@ type model struct {
 
 	resultLinks  list.Model
 	selectedLink string
+	linkSelected bool
 
 	resultLimits  list.Model
-	selectedLimit int
-	limitChosen   bool
+	selectedLimit string
+	limitSelected bool
 
 	quit bool
 	err  error
@@ -71,22 +56,28 @@ func (e errMsg) Error() string {
 }
 
 func InitialModel() model {
-	var limits = []list.Item{item(5), item(10), item(20)}
+	var (
+		delegateKeys = newDelegateKeyMap()
+	)
 
-	l := list.New(limits, itemDelegate{}, 20, 10)
+	// Setup limit list
+	var limits = []list.Item{item{title: "5"}, item{title: "10"}, item{title: "20"}}
+	delegate := newItemDelegate(delegateKeys)
+	l := list.New(limits, delegate, 0, 0)
 	l.Title = "How many results you would like to see?"
-	l.SetShowStatusBar(false)
+	l.SetShowStatusBar(true)
+	l.Styles.StatusBar = statusMessageStyle
 	l.SetFilteringEnabled(false)
+	l.SetShowPagination(false)
 	l.Styles.Title = titleStyle
-	l.Styles.PaginationStyle = paginationStyle
 	l.Styles.HelpStyle = helpStyle
 
+	// Setup query textinput
 	t := textinput.New()
 	t.Placeholder = "C'mon pal ask me anything!"
-	t.TextStyle.BorderBottom(true)
 	t.Validate = func(s string) error {
-		if string(s) == "" {
-			return errors.New("not valid")
+		if strings.Trim(s, " ") == "" {
+			return errors.New("please enter a valid input")
 		}
 		return nil
 	}
@@ -96,7 +87,7 @@ func InitialModel() model {
 
 	return model{
 		resultLimits:   l,
-		limitChosen:    false,
+		limitSelected:  false,
 		query:          t,
 		querySubmitted: false,
 	}
@@ -109,17 +100,22 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		key := msg.String()
-		if key == "q" && m.querySubmitted || key == "ctrl+c" || key == "esc" {
+		if key == "ctrl+c" {
 			m.quit = true
 			return m, tea.Quit
 		}
+	}
+
+	if m.err != nil {
+		m.query.PlaceholderStyle = invalidInputStyle
+		m.query.Placeholder = "Invalid input!!!"
 	}
 
 	if !m.querySubmitted {
 		return m.updateQuery(msg)
 	}
 
-	if !m.limitChosen {
+	if !m.limitSelected {
 		return m.updateLimits(msg)
 	}
 
@@ -134,11 +130,11 @@ func (m model) View() string {
 	}
 
 	if !m.querySubmitted {
-		return fmt.Sprintf(s, m.query.View())
+		return appStyle.Render(fmt.Sprintf(s, m.query.View()))
 	}
 
-	if !m.limitChosen {
-		return fmt.Sprintf(s, m.resultLimits.View())
+	if !m.limitSelected {
+		return appStyle.Render(fmt.Sprintf(s, m.resultLimits.View()))
 	}
 
 	return s
@@ -151,10 +147,14 @@ func (m model) updateQuery(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
-			if m.query.Err != nil {
-				m.querySubmitted = true
+			err := m.query.Validate(m.query.Value())
+			if err != nil {
+				m.err = err
 				return m, nil
 			}
+			m.querySubmitted = true
+			m.query.Blur()
+			return m, nil
 		}
 
 	}
@@ -165,18 +165,26 @@ func (m model) updateQuery(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) updateLimits(msg tea.Msg) (tea.Model, tea.Cmd) {
 
-	switch msg := msg.(tea.KeyMsg); msg.String() {
-	case "q", "esc":
-		m.querySubmitted = false
-		return m, nil
-	case "enter", " ":
-		i, ok := m.resultLimits.SelectedItem().(item)
-		if ok {
-			m.limitChosen = true
-			m.selectedLimit = int(i)
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "q", "esc", "backspace":
+			m.querySubmitted = false
+			m.query.Focus()
+			return m, nil
+		case "enter", " ":
+			i, ok := m.resultLimits.SelectedItem().(item)
+			if ok {
+				m.limitSelected = true
+				m.selectedLimit = string(i.title)
+			}
+			return m, nil
 		}
-		return m, nil
+
 	}
 
-	return m, nil
+	newListModel, cmd := m.resultLimits.Update(msg)
+	m.resultLimits = newListModel
+
+	return m, cmd
 }
