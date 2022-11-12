@@ -11,7 +11,7 @@ import (
 func newItemDelegate(keys *delegateKeyMap) list.DefaultDelegate {
 	d := list.NewDefaultDelegate()
 
-	d.ShowDescription = false
+	d.ShowDescription = true
 
 	d.UpdateFunc = func(msg tea.Msg, m *list.Model) tea.Cmd {
 		var title string
@@ -26,9 +26,9 @@ func newItemDelegate(keys *delegateKeyMap) list.DefaultDelegate {
 		case tea.KeyMsg:
 			switch {
 			case key.Matches(msg, keys.choose):
-				return m.NewStatusMessage(fmt.Sprintf("Let's go with %s!", title))
+				return m.NewStatusMessage(listStatusBarStyle.Render((fmt.Sprintf("Let's go with %s!", title))))
 			case key.Matches(msg, keys.cancel):
-				return m.NewStatusMessage("I need to go back to input")
+				return m.NewStatusMessage(listStatusBarStyle.Render("I need to go back to input"))
 			}
 		}
 
@@ -39,6 +39,10 @@ func newItemDelegate(keys *delegateKeyMap) list.DefaultDelegate {
 
 	d.ShortHelpFunc = func() []key.Binding {
 		return help
+	}
+
+	d.FullHelpFunc = func() [][]key.Binding {
+		return [][]key.Binding{help}
 	}
 
 	return d
@@ -53,6 +57,15 @@ func (d delegateKeyMap) ShortHelp() []key.Binding {
 	return []key.Binding{
 		d.choose,
 		d.cancel,
+	}
+}
+
+func (d delegateKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{
+			d.choose,
+			d.cancel,
+		},
 	}
 }
 
