@@ -19,7 +19,13 @@ var (
 
 	// General
 	appStyle      = lipgloss.NewStyle().Padding(1, 2)
-	appTitleStyle = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true).Background(primaryColor).Foreground(lipgloss.AdaptiveColor{Light: "#f5f5f5", Dark: "#151515"}).Padding(1, 2)
+	appTitleStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder(), true).
+			Background(primaryColor).
+			Foreground(lipgloss.AdaptiveColor{Light: "#f5f5f5", Dark: "#151515"}).
+			Padding(1).
+			Align(lipgloss.Center).
+			Bold(true)
 	quitTextStyle = lipgloss.NewStyle().Margin(1, 0, 2, 4)
 
 	// Query Input
@@ -36,8 +42,8 @@ var (
 			NewStyle().
 			Foreground(primaryColor).
 			Padding(0, 0, 0, 2).
-			Border(lipgloss.RoundedBorder(), false, false, false, true).BorderForeground(secondaryColor)
-	listHelpStyle = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
+			Border(lipgloss.RoundedBorder(), false, false, false, true).BorderForeground(primaryColor)
+	listHelpStyle = list.DefaultStyles().HelpStyle.PaddingLeft(1).PaddingBottom(0)
 )
 
 type item struct {
@@ -54,11 +60,9 @@ type model struct {
 	querySubmitted bool
 
 	// resultLinks  list.Model
-	// selectedLink string
 	// linkSelected bool
 
-	resultLimits list.Model
-	// selectedLimit string
+	resultLimits  list.Model
 	limitSelected bool
 
 	quit bool
@@ -81,13 +85,10 @@ func InitialModel() model {
 	// Setup limit list
 	var limits = []list.Item{item{title: "5", description: "I'm really close to crying"}, item{title: "10", description: "Why is this not rendering?!?"}, item{title: "20", description: "No idea lol."}}
 	d := newItemDelegate(delegateKeys)
-	d.Styles.SelectedTitle = listItemStyle
-	d.Styles.SelectedDesc = listItemStyle
-	// TODO: Is there a way to set the widthxheight at the initial phase depending on the terminal's size?
-	l := list.New(limits, d, 75, 15)
+
+	l := list.New(limits, d, 75, 20)
 	l.Title = "How many results you would like to see?"
 	l.SetShowStatusBar(false)
-	l.SetShowPagination(true)
 	l.Styles.StatusBar = listStatusBarStyle
 	l.Styles.Title = listTitleStyle
 	l.Styles.HelpStyle = listHelpStyle
@@ -122,6 +123,16 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		// This gets called at the initialization and everytime window gets resized.
+		appTitleStyle.Width(msg.Width - (appTitleStyle.GetBorderLeftSize() + appTitleStyle.GetBorderRightSize() + appStyle.GetHorizontalPadding()))
+		appStyle.Width(msg.Width)
+		appStyle.Height(msg.Height)
+		if m.querySubmitted && !m.limitSelected {
+			m.resultLimits.SetHeight(msg.Height - appTitleStyle.GetHeight() - 10)
+			m.resultLimits.SetWidth(msg.Width)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		if m.resultLimits.FilterState() == list.Filtering {
 			break
@@ -150,7 +161,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	title := appTitleStyle.Render("Welcome to Stacked-In CLI!")
+	title := appTitleStyle.Render("Stacked-In CLI")
 
 	if m.quit {
 		return quitTextStyle.Render("\nSee you soon pal!\n")
@@ -164,9 +175,9 @@ func (m model) View() string {
 		return appStyle.Render(fmt.Sprintf("%s\n\n%s", title, m.resultLimits.View()))
 	}
 
-	// if m.limitSelected {
-	// 	return appStyle.Render(fmt.Sprintf(s, m.resultLimits.SelectedItem()))
-	// }
+	if m.limitSelected {
+		return appStyle.Render(fmt.Sprintf("%s\n\n%s", title, m.resultLimits.SelectedItem().(item).Title()))
+	}
 
 	return title
 }
@@ -197,16 +208,24 @@ func (m model) updateQuery(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateLimits(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	switch msg := msg.(type) {
+	// TODO: There is something flaky with the transition between query and result limit
 
+	if m.resultLimits.FilterState() == list.Filtering {
+		m.resultLimits, cmd = m.resultLimits.Update(msg)
+		return m, cmd
+	}
+
+	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "backspace":
 			// TODO: By default q and esc triggers quit cmd, eliminate this behavior to navigate between views.
-			m.resultLimits, cmd = m.resultLimits.Update(msg)
-			return m, cmd
+			m.querySubmitted = false
+			m.query.Focus()
+			return m, nil
 		case "enter", " ":
 			// TODO: call the scrapper and show links, once clicks browser should open OR use viewport and display answer (maybe most liked)
+			m.limitSelected = true
 			m.resultLimits, cmd = m.resultLimits.Update(msg)
 			return m, cmd
 		}

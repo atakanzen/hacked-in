@@ -35,6 +35,10 @@ func newItemDelegate(keys *delegateKeyMap) list.DefaultDelegate {
 		return nil
 	}
 
+	// Styling
+	d.Styles.SelectedTitle = listItemStyle.Copy()
+	d.Styles.SelectedDesc = listItemStyle.Copy().Foreground(secondaryColor)
+
 	help := []key.Binding{keys.choose, keys.cancel}
 
 	d.ShortHelpFunc = func() []key.Binding {
