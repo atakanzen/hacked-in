@@ -1,18 +1,14 @@
 package main
 
 import (
-	"fmt"
-	"os"
-
-	"github.com/atakanzen/stacked-in/cli"
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/atakanzen/stacked-in/scraper"
 )
 
 func main() {
-	p := tea.NewProgram(cli.InitialModel(), tea.WithAltScreen())
-	if err := p.Start(); err != nil {
-		fmt.Printf("Alas, there's been an error: %v", err)
-		os.Exit(1)
-	}
-
+	// p := tea.NewProgram(cli.InitialModel(), tea.WithAltScreen())
+	// if err := p.Start(); err != nil {
+	// 	fmt.Printf("Alas, there's been an error: %v", err)
+	// 	os.Exit(1)
+	// }
+	scraper.NewScraper()
 }
