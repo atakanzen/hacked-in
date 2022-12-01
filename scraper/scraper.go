@@ -2,33 +2,21 @@ package scraper
 
 import (
 	"fmt"
-	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/gocolly/colly/v2"
+	"github.com/gocolly/colly/v2/debug"
 )
 
 func NewScraper() {
 	c := colly.NewCollector(
-	// colly.AllowedDomains("www.google.com", "google.com", "consent.google.com"),
-	// colly.AllowURLRevisit(),
-	// colly.UserAgent("firefox"),
-	// colly.Debugger(&debug.LogDebugger{}),
+		colly.AllowedDomains("www.news.ycombinator.com", "news.ycombinator.com"),
+		// colly.AllowURLRevisit(),
+		colly.UserAgent("Mozilla/5.0 (platform; rv:geckoversion) Gecko/geckotrail Firefox/firefoxversion"),
 	// colly.Async(true),
 	)
 
-	c.SetRedirectHandler(func(req *http.Request, via []*http.Request) error {
-		host := req.URL.Host
-		if ok, _ := regexp.MatchString("consent\\D*$", host); ok {
-			fmt.Printf("Hello????")
-			req.AddCookie(&http.Cookie{
-				Name:  "CONSENT",
-				Value: "YES+srp.gws-20220111-0-RC3.pl+FX+161",
-			})
-		}
-		return nil
-	})
+	c.SetDebugger(&debug.LogDebugger{})
 
 	c.Limit(&colly.LimitRule{
 		// Set a delay between requests to these domains
@@ -38,20 +26,20 @@ func NewScraper() {
 	})
 
 	c.OnResponse(func(r *colly.Response) {
-		fmt.Printf("Got response from: %s", r.Body)
+		fmt.Printf("Got response from: %s", r.Request.URL)
 	})
 
 	c.OnError(func(r *colly.Response, err error) {
 		fmt.Printf("Something went wrong:\nResponse:\n%s\nError:\n%s", r.Body, err)
 	})
 
-	c.OnHTML("div[id=res]", func(e *colly.HTMLElement) {
-		fmt.Printf("Got: %s", e.Text)
+	c.OnHTML("tr.athing", func(e *colly.HTMLElement) {
+		fmt.Printf("\n\n\n\nHTML: %s", e.Text)
 	})
 
 	c.OnRequest(func(r *colly.Request) {
 		fmt.Printf("Visiting %s\n", r.URL)
 	})
 
-	c.Visit("https://www.google.com/search?q=site%3Astackoverflow.com+react+server+components")
+	c.Visit("https://news.ycombinator.com/")
 }
