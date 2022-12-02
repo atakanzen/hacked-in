@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/gocolly/colly/v2"
-	"github.com/gocolly/colly/v2/debug"
 )
 
 func NewScraper() {
@@ -16,7 +15,7 @@ func NewScraper() {
 	// colly.Async(true),
 	)
 
-	c.SetDebugger(&debug.LogDebugger{})
+	// c.SetDebugger(&debug.LogDebugger{})
 
 	c.Limit(&colly.LimitRule{
 		// Set a delay between requests to these domains
@@ -34,7 +33,9 @@ func NewScraper() {
 	})
 
 	c.OnHTML("tr.athing", func(e *colly.HTMLElement) {
-		fmt.Printf("\n\n\n\nHTML: %s", e.Text)
+		e.ForEach("td.title", func(i int, h *colly.HTMLElement) {
+			fmt.Printf("Index: %d ElemenText; %s\n\n", i, h.DOM.Text())
+		})
 	})
 
 	c.OnRequest(func(r *colly.Request) {
