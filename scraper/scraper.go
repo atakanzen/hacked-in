@@ -7,7 +7,16 @@ import (
 	"github.com/gocolly/colly/v2"
 )
 
+type hackerPosts struct {
+	Title string `selector:".titleline > a"`
+	URL   string `selector:".titleline > a" attr:"href"`
+	// Score string `selector:".subline > .score"`
+	// Age   string `selector:".subline > .age > a"`
+}
+
 func NewScraper() {
+	posts := []hackerPosts{}
+
 	c := colly.NewCollector(
 		colly.AllowedDomains("www.news.ycombinator.com", "news.ycombinator.com"),
 		// colly.AllowURLRevisit(),
@@ -33,9 +42,9 @@ func NewScraper() {
 	})
 
 	c.OnHTML("tr.athing", func(e *colly.HTMLElement) {
-		e.ForEach("td.title", func(i int, h *colly.HTMLElement) {
-			fmt.Printf("Index: %d ElemenText; %s\n\n", i, h.DOM.Text())
-		})
+		post := &hackerPosts{}
+		e.Unmarshal(post)
+		posts = append(posts, *post)
 	})
 
 	c.OnRequest(func(r *colly.Request) {
@@ -43,4 +52,6 @@ func NewScraper() {
 	})
 
 	c.Visit("https://news.ycombinator.com/")
+
+	fmt.Printf("\n\n%v\n\n", posts)
 }
