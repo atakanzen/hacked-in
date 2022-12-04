@@ -7,51 +7,79 @@ import (
 	"github.com/gocolly/colly/v2"
 )
 
-type hackerPosts struct {
-	Title string `selector:".titleline > a"`
-	URL   string `selector:".titleline > a" attr:"href"`
-	// Score string `selector:".subline > .score"`
-	// Age   string `selector:".subline > .age > a"`
+type postMetadata struct {
+	Score string `selector:".subline > .score"`
+	Age   string `selector:".subline > .age > a"`
 }
 
-func NewScraper() {
-	posts := []hackerPosts{}
+type hackerPost struct {
+	Title    string `selector:".titleline > a"`
+	URL      string `selector:".titleline > a" attr:"href"`
+	Metadata postMetadata
+}
 
-	c := colly.NewCollector(
+func setupCollectors() (*colly.Collector, *colly.Collector) {
+	mc := colly.NewCollector(
 		colly.AllowedDomains("www.news.ycombinator.com", "news.ycombinator.com"),
 		// colly.AllowURLRevisit(),
 		colly.UserAgent("Mozilla/5.0 (platform; rv:geckoversion) Gecko/geckotrail Firefox/firefoxversion"),
 	// colly.Async(true),
 	)
 
-	// c.SetDebugger(&debug.LogDebugger{})
+	sc := colly.NewCollector(
+		colly.AllowedDomains("www.news.ycombinator.com", "news.ycombinator.com"),
+		// colly.AllowURLRevisit(),
+		colly.UserAgent("Mozilla/5.0 (platform; rv:geckoversion) Gecko/geckotrail Firefox/firefoxversion"),
+	// colly.Async(true),
+	)
 
-	c.Limit(&colly.LimitRule{
+	mc.Limit(&colly.LimitRule{
 		// Set a delay between requests to these domains
 		Delay: 1 * time.Second,
 		// Add an additional random delay
 		RandomDelay: 1 * time.Second,
 	})
 
-	c.OnResponse(func(r *colly.Response) {
-		fmt.Printf("Got response from: %s", r.Request.URL)
+	sc.Limit(&colly.LimitRule{
+		// Set a delay between requests to these domains
+		Delay: 1 * time.Second,
+		// Add an additional random delay
+		RandomDelay: 1 * time.Second,
 	})
 
-	c.OnError(func(r *colly.Response, err error) {
-		fmt.Printf("Something went wrong:\nResponse:\n%s\nError:\n%s", r.Body, err)
+	return mc, sc
+}
+
+func ScrapePosts() *[]hackerPost {
+	posts := []hackerPost{}
+	postMetas := []postMetadata{}
+
+	// Main Collector
+	mc, sc := setupCollectors()
+
+	mc.OnError(func(r *colly.Response, err error) {
+		fmt.Printf("Error on Main Collector:\nResponse:\n%s\nError:\n%s", r.Body, err)
 	})
 
-	c.OnHTML("tr.athing", func(e *colly.HTMLElement) {
-		post := &hackerPosts{}
-		e.Unmarshal(post)
+	// Post Basic
+	mc.OnHTML("tr.athing", func(h *colly.HTMLElement) {
+		post := &hackerPost{}
+		h.Unmarshal(post)
 		posts = append(posts, *post)
 	})
 
-	c.OnRequest(func(r *colly.Request) {
-		fmt.Printf("Visiting %s\n", r.URL)
+	sc.OnHTML("tr.athing + tr", func(h2 *colly.HTMLElement) {
+		postMeta := &postMetadata{}
+		h2.Unmarshal(postMeta)
+		postMetas = append(postMetas, *postMeta)
 	})
 
-	c.Visit("https://news.ycombinator.com/")
+	mc.Visit("https://news.ycombinator.com/")
+	sc.Visit("https://news.ycombinator.com/")
 
-	fmt.Printf("\n\n%v\n\n", posts)
+	for i, _ := range posts {
+		posts[i].Metadata = postMetas[i]
+	}
+
+	return &posts
 }

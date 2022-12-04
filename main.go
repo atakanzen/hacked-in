@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/atakanzen/stacked-in/scraper"
 )
 
@@ -10,5 +12,7 @@ func main() {
 	// 	fmt.Printf("Alas, there's been an error: %v", err)
 	// 	os.Exit(1)
 	// }
-	scraper.NewScraper()
+	posts := scraper.ScrapePosts()
+
+	fmt.Printf("\n%+v\n", posts)
 }
